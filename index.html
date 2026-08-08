@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!--
   Dompet AYU v4.3 — GitHub Native Frontend
-  Frontend berjalan langsung dari GitHub Pages.
-  Google Apps Script hanya digunakan sebagai REST API.
+  Berjalan langsung dari GitHub Pages.
+  Google Apps Script sebagai REST API.
 -->
 <html lang="id">
 <head>
@@ -503,7 +503,7 @@ async function doLogin(){
   const res=await api('verify_pin',{pin});
   hideLoader();
   if(!res){$('loginErr').textContent='Gagal terhubung ke server';return}
-  if(res.locked){$('loginErr').textContent='Terlalu banyak percobaan. Coba lagi dalam '+(res.minsLeft||30)+' menit.';$('pinInput').value='';return}
+  if(res.locked){$('loginErr').innerHTML='Terlalu banyak percobaan. Coba lagi dalam '+(res.minsLeft||30)+' menit.<br><a href="#" onclick="resetLoginLock();return false" style="color:#ff9a9a;font-size:11px">Reset lock (jika ini keliru)</a>';$('pinInput').value='';return}
   if(res.firstTime){await apiPost({action:'set_pin',pin});toast('Password dibuat!');$('pinInput').value='';return}
   if(!res.valid){const sisa=res.attemptsLeft>0?' ('+res.attemptsLeft+'x lagi)':'';$('loginErr').textContent='Password salah'+sisa;$('pinInput').value='';return}
   saveSession();
@@ -556,6 +556,10 @@ function logout(){
   $('app').style.display='none';$('loginPage').style.display='flex';
   $('pinInput').value='';$('loginErr').textContent='';
   checkBiometricAvailable();
+}
+async function resetLoginLock(){
+  const r=await api('reset_login_lock');
+  if(r?.reset){$('loginErr').textContent='Lock direset. Silakan login kembali.';$('pinInput').focus()}
 }
 // -- Biometric WebAuthn v4.3
 function isBiometricAvailable(){return!!(window.PublicKeyCredential&&navigator.credentials)}
@@ -1389,7 +1393,7 @@ function pgAset(){
     const iH=its.map(x=>{
       const nS=Number(x.nilai_sekarang||x.nilai_beli||0),nB=Number(x.nilai_beli||0);
       const g=nS-nB,p=nB>0?Math.round(g/nB*1000)/10:0,gC2=g>=0?'var(--success)':'var(--red)',sG2=g>=0?'+':'';
-      const sub=x.jumlah_unit?(x.jenis==='Logam Mulia'?x.jumlah_unit+'g':x.jumlah_unit+' lot'):'';
+      const sub=x.jumlah_unit?((x.jenis==='Logam Mulia'||x.jenis==='Perhiasan')?x.jumlah_unit+'g':x.jumlah_unit+' lot'):'';
       return`<div class="list-item" style="border-radius:0;border-bottom:1px solid var(--border)">
         <span class="li-icon asset">${iM[x.jenis]||'&#128188;'}</span>
         <div class="li-body"><div class="li-title">${x.nama}</div><div class="li-sub">Beli:${fmtRp(nB)}${sub?' · '+sub:''}</div></div>
@@ -1809,7 +1813,7 @@ async function checkRemoteChanges(){
 
 document.addEventListener('DOMContentLoaded',()=>{
   const s=getSession();if(s?.active&&(Date.now()-s.ts<TIMEOUT_MS))enterApp();
-  else{clearSession();if(API_URL)api('verify_pin',{pin:''}).then(r=>{if(r?.firstTime)$('loginHint').textContent='Pertama kali? Buat PIN baru.'})}
+  else{clearSession();if(API_URL)api('verify_pin',{pin:''}).then(r=>{if(r?.firstTime)$('loginHint').textContent='Pertama kali? Buat password (min 8 karakter) untuk mulai.'});checkBiometricAvailable()}
   ['click','touchstart','keydown'].forEach(e=>document.addEventListener(e,()=>{if(getSession())saveSession()},{passive:true}));
   window.addEventListener('popstate',()=>{if($('modal').classList.contains('open'))closeModal()});
   $('pinInput').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
