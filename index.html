@@ -1,8 +1,6 @@
 <!DOCTYPE html>
 <!--
   Dompet AYU v4.3 — GitHub Native Frontend
-  Berjalan langsung dari GitHub Pages.
-  Google Apps Script sebagai REST API.
 -->
 <html lang="id">
 <head>
@@ -1420,9 +1418,13 @@ function addAset(){openModal(`<h3>Tambah Aset <button onclick="closeModal()">×<
 function toggleAsetFields(tickerVal,unitVal){
   const jenis=$('aJ').value;
   if(jenis==='Logam Mulia'||jenis==='Perhiasan'){
-    const lbl=jenis==='Perhiasan'?'Berat (gram) — &#128141; Perhiasan Emas':'Berat (gram) — untuk update harga otomatis';
-    $('aAutoFields').innerHTML=`<div class="form-group"><label>${lbl}</label><input type="number" id="aU" step="0.1" min="0" placeholder="mis: 5 atau 10.5" value="${unitVal||''}" class="money-input" style="max-width:160px"><span style="font-size:12px;color:var(--text3);display:block;margin-top:4px">${jenis==='Perhiasan'?'Nilai akan dihitung dari harga emas LM per gram':'Nilai dihitung otomatis: berat × harga emas LM'}</span></div>`;
+    const lbl=jenis==='Perhiasan'?'Berat (gram) — 💍 Perhiasan Emas':'Berat (gram) — untuk update harga otomatis';
+    $('aAutoFields').innerHTML=`<div class="form-group"><label>${lbl}</label><input type="number" id="aU" step="0.1" min="0" placeholder="mis: 5 atau 10.5" value="${unitVal||''}" class="money-input" style="max-width:160px"><span style="font-size:12px;color:var(--text3);display:block;margin-top:4px">${jenis==='Perhiasan'?'Nilai dihitung: berat × harga emas LM per gram':'Nilai dihitung otomatis: berat × harga emas LM'}</span></div>`;
   }else if(jenis==='Saham'){
+    $('aAutoFields').innerHTML=`<div class="form-row"><div class="form-group"><label>Kode Ticker (cth: BBCA)</label><input type="text" id="aTicker" placeholder="BBCA" value="${tickerVal||''}" style="max-width:120px;text-transform:uppercase"></div><div class="form-group"><label>Jumlah Lot</label><input type="number" id="aUnit" placeholder="mis: 5" value="${unitVal||''}" min="0" style="max-width:100px"></div></div>`;
+  }else{
+    $('aAutoFields').innerHTML='';
+  }
 }
 function editAset(id){const a=(DB.aset||[]).find(x=>x.id===id);if(!a)return;openModal(`<h3>Edit Aset <button onclick="closeModal()">×</button></h3><div class="form-group"><label>Jenis</label><select id="aJ" onchange="toggleAsetFields()">${['Logam Mulia','Saham','Sukuk','Deposito','Properti','Kendaraan','Lainnya'].map(j=>`<option ${j===a.jenis?'selected':''}>${j}</option>`).join('')}</select></div><div class="form-group"><label>Nama</label><input type="text" id="aN" value="${esc(a.nama)}"></div><div class="form-group"><label>Detail</label><input type="text" id="aD" value="${esc(a.detail)}"></div>
 <div id="aAutoFields"></div>
@@ -1812,17 +1814,34 @@ async function checkRemoteChanges(){
 }
 
 document.addEventListener('DOMContentLoaded',()=>{
-  const s=getSession();if(s?.active&&(Date.now()-s.ts<TIMEOUT_MS))enterApp();
-  else{clearSession();if(API_URL)api('verify_pin',{pin:''}).then(r=>{if(r?.firstTime)$('loginHint').textContent='Pertama kali? Buat password (min 8 karakter) untuk mulai.'});checkBiometricAvailable()}
-  ['click','touchstart','keydown'].forEach(e=>document.addEventListener(e,()=>{if(getSession())saveSession()},{passive:true}));
-  window.addEventListener('popstate',()=>{if($('modal').classList.contains('open'))closeModal()});
-  $('pinInput').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
-  // Splash screen: show briefly for a smooth first impression, then reveal login/app underneath
-  setTimeout(()=>{
-    const sp=$('splashScreen');
-    sp.classList.add('hide');
-    setTimeout(()=>{sp.style.display='none'},450);
-  },1100);
+  try{
+    const s=getSession();
+    if(s?.active&&(Date.now()-s.ts<TIMEOUT_MS)){enterApp()}
+    else{
+      clearSession();
+      // Cek firstTime & biometric — jangan block splash
+      if(API_URL){
+        api('verify_pin',{pin:''})
+          .then(r=>{if(r?.firstTime)$('loginHint').textContent='Pertama kali? Buat password untuk mulai.'})
+          .catch(()=>{});
+      }
+      setTimeout(checkBiometricAvailable,500);
+    }
+    ['click','touchstart','keydown'].forEach(e=>document.addEventListener(e,()=>{if(getSession())saveSession()},{passive:true}));
+    window.addEventListener('popstate',()=>{try{if($('modal').classList.contains('open'))closeModal()}catch(e){}});
+    const pi=$('pinInput');if(pi)pi.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
+  }catch(initErr){
+    logError({message:'DOMContentLoaded error: '+initErr.message,stack:initErr.stack||''});
+    // Pastikan splash tetap hilang walaupun ada error
+    setTimeout(()=>{try{const sp=$('splashScreen');if(sp)sp.style.display='none'}catch(e){}},2000);
+  }
+  // Splash screen - dengan triple failsafe
+  function hideSplash(){
+    try{const sp=$('splashScreen');if(sp&&sp.style.display!=='none'){sp.classList.add('hide');setTimeout(()=>{if(sp)sp.style.display='none'},450)}}catch(e){}
+  }
+  setTimeout(hideSplash,1100);           // Normal: 1.1 detik
+  setTimeout(hideSplash,3000);           // Failsafe 1: 3 detik
+  setTimeout(hideSplash,6000);           // Failsafe 2: 6 detik (jika GAS lambat)
 });
 // Logo dedup: isi src mini-logo & loader-logo dari loginPage img (hemat ~26KB duplikasi)
 (function(){const s=document.querySelector('#loginPage img')?.src;if(s){document.querySelectorAll('.mini-logo,.loader-logo').forEach(img=>{if(!img.src||img.src===window.location.href)img.src=s})}})();
