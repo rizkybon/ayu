@@ -533,7 +533,14 @@ async function doLogin(){
   if(res.locked){$('loginErr').innerHTML='Terlalu banyak percobaan. Coba lagi dalam '+(res.minsLeft||30)+' menit.<br><a href="#" onclick="resetLoginLock();return false" style="color:#ff9a9a;font-size:11px">Reset lock (jika ini keliru)</a>';$('pinInput').value='';return}
   if(res.firstTime){await apiPostAuth({action:'set_pin',pin});toast('Password dibuat!');$('pinInput').value='';return}
   if(res.token)saveToken(res.token); // #3: simpan session token
-  if(!res.valid){const sisa=res.attemptsLeft>0?' ('+res.attemptsLeft+'x lagi)':'';$('loginErr').textContent='Password salah'+sisa;$('pinInput').value='';return}
+  if(!res.valid){
+    const sisa=res.attemptsLeft>0?' (sisa '+res.attemptsLeft+'x percobaan)':'';
+    $('loginErr').textContent='Password salah'+sisa;
+    if(res.attemptsLeft<=2){
+      $('loginErr').innerHTML+='<br><a href="#" onclick="resetLoginLock();return false" style="color:#ff9a9a;font-size:11px">Reset percobaan login (jika lupa password)</a>';
+    }
+    $('pinInput').value='';return;
+  }
   saveSession();
   if(pin.length<8)setTimeout(()=>toast('Tip: Perbarui ke password 8+ karakter di Pengaturan'),2500);
   enterApp();
@@ -619,7 +626,20 @@ async function loginWithBiometric(){
     const challenge=new Uint8Array(32);crypto.getRandomValues(challenge);
     const rawId=Uint8Array.from(atob(sid),c=>c.charCodeAt(0));
     const a=await navigator.credentials.get({publicKey:{challenge,allowCredentials:[{id:rawId,type:'public-key'}],userVerification:'required',timeout:60000}});
-    if(a){saveSession();enterApp()}
+    if(a){
+      // WebAuthn device OK — minta token dari server via endpoint khusus
+      showLoader();
+      const res=await apiPostAuth({action:'biometric_login'});
+      hideLoader();
+      if(!res){
+        toast('Biometrik: gagal dapat sesi baru. Coba masuk dengan password.');
+        $('pinInput').focus();
+        return;
+      }
+      if(res.token)saveToken(res.token);
+      saveSession();
+      enterApp();
+    }
   }catch(e){if(e.name!=='NotAllowedError')toast('Biometrik gagal: '+(e.message||'Error'))}
 }
 function togglePwVis(id,el){const i=$(id);if(!i)return;i.type=i.type==='password'?'text':'password';el.style.opacity=i.type==='text'?'1':'0.5'}
