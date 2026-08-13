@@ -519,7 +519,9 @@ async function apiPostAuth(b){
   if(!API_URL)return null;
   try{
     const r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(b),redirect:'follow'});
-    const j=await r.json();if(!j.success)return null;return j.data
+    const j=await r.json();
+    if(!j.success)return{_error:true,message:j.error||'Gagal'};
+    return j.data
   }catch(e){return null}
 }
 async function doLogin(){
@@ -529,7 +531,7 @@ async function doLogin(){
   showLoader();
   const res=await apiPostAuth({action:'verify_pin',pin}); // #2: verify_pin via POST
   hideLoader();
-  if(!res){$('loginErr').textContent='Gagal terhubung ke server';return}
+  if(!res||res._error){$('loginErr').textContent=(res&&res.message)||'Gagal terhubung ke server';return}
   if(res.locked){$('loginErr').innerHTML='Terlalu banyak percobaan. Coba lagi dalam '+(res.minsLeft||30)+' menit.<br><a href="#" onclick="resetLoginLock();return false" style="color:#ff9a9a;font-size:11px">Reset lock (jika ini keliru)</a>';$('pinInput').value='';return}
   if(res.firstTime){await apiPostAuth({action:'set_pin',pin});toast('Password dibuat!');$('pinInput').value='';return}
   if(res.token)saveToken(res.token); // #3: simpan session token
@@ -1799,6 +1801,7 @@ function pgSettings(){const s=DB.settings||[];const fn=s.find(x=>x.key==='family
 <div class="form-group"><label>Password Baru (min 8 karakter)</label><div class="pw-wrap"><input type="password" id="sNP" maxlength="32" placeholder="Huruf+angka, min 8 karakter" autocomplete="new-password" oninput="showPwStrength(this.value)"><span class="pw-eye" onclick="togglePwVis('sNP',this)">&#128065;</span></div><div class="pw-strength" id="pwStrBar"></div><div class="pw-strength-label" id="pwStrLabel"></div></div>
 <div class="form-group"><label>Konfirmasi</label><div class="pw-wrap"><input type="password" id="sCP" maxlength="32" placeholder="Ulangi password baru" autocomplete="new-password"><span class="pw-eye" onclick="togglePwVis('sCP',this)">&#128065;</span></div></div>
 <button class="btn btn-out btn-block" onclick="chgPin()">Ubah Password</button>
+<div id="chgPinErr" style="color:var(--red);font-size:12px;margin-top:6px;min-height:16px"></div>
 <hr style="margin:12px 0;border:none;border-top:1px solid var(--border)">
 <div class="card-title">Sidik Jari / Face ID</div>
 <button class="btn btn-out btn-block" onclick="setupBiometric()" style="margin-bottom:6px">Aktifkan Sidik Jari</button>
@@ -1817,12 +1820,25 @@ async function svSet(k,v){
 }
 async function chgPin(){
   const o=$('sOP').value,n=$('sNP').value,c=$('sCP').value;
-  if(!o){toast('Masukkan password lama');return}
-  if(n.length<8){toast('Minimal 8 karakter');return}
-  if(!/[a-zA-Z]/.test(n)||!/[0-9]/.test(n)){toast('Harus ada huruf dan angka');return}
-  if(n!==c){toast('Konfirmasi tidak cocok');return}
-  showMini();const r=await apiPost({action:'change_pin',old_pin:o,new_pin:n});hideMini();
-  if(r)toast('Password berhasil diubah!');
+  const errEl=$('chgPinErr');
+  if(errEl)errEl.textContent='';
+  if(!o){if(errEl)errEl.textContent='Masukkan password lama';else toast('Masukkan password lama');return}
+  if(n.length<8){if(errEl)errEl.textContent='Password baru minimal 8 karakter';else toast('Minimal 8 karakter');return}
+  if(!/[a-zA-Z]/.test(n)||!/[0-9]/.test(n)){if(errEl)errEl.textContent='Harus ada huruf dan angka';else toast('Harus ada huruf dan angka');return}
+  if(n!==c){if(errEl)errEl.textContent='Konfirmasi tidak cocok';else toast('Konfirmasi tidak cocok');return}
+  showMini('Mengubah password...');
+  const res=await apiPostAuth({action:'change_pin',old_pin:o,new_pin:n});
+  hideMini();
+  if(res&&res.changed){
+    toast('✅ Password berhasil diubah!');
+    if($('sOP'))$('sOP').value='';
+    if($('sNP'))$('sNP').value='';
+    if($('sCP'))$('sCP').value='';
+    if(errEl)errEl.textContent='';
+  }else{
+    const msg=(res&&res._error&&res.message)||'Gagal terhubung ke server. Coba lagi.';
+    if(errEl)errEl.textContent=msg;else toast(msg);
+  }
 }
 function showPwStrength(pw){const s=pwStrength(pw);const b=$('pwStrBar'),l=$('pwStrLabel');if(b){b.className='pw-strength'+(s.cls?' '+s.cls:'');b.style.width=s.level?s.level/3*100+'%':'0'}if(l){l.textContent=s.label;l.style.color=s.cls==='weak'?'#e74c3c':s.cls==='medium'?'#f39c12':'#1a6b4a'}}
 // ── Push Notification (#11 frontend) ─────────────────────────
