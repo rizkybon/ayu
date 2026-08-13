@@ -73,3 +73,38 @@ self.addEventListener('fetch', event => {
     })
   );
 });
+
+// ── Push Notification (#11) ─────────────────────────────────
+// Menampilkan notifikasi saat menerima push dari server (mis. pengingat tagihan jatuh tempo)
+self.addEventListener('push', event => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch (e) {
+    data = { title: 'Dompet AYU', body: event.data ? event.data.text() : '' };
+  }
+  const title = data.title || 'Dompet AYU';
+  const options = {
+    body: data.body || '',
+    tag: data.tag || 'dompetayu-notif',
+    data: data.data || { url: './' },
+    // Ikon memakai app-shell yang sudah ada; aman jika file belum ada (browser fallback ke ikon default)
+    icon: './icon-192.png',
+    badge: './icon-72.png'
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// Saat notifikasi diklik: fokuskan tab yang sudah terbuka, atau buka tab baru
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const targetUrl = (event.notification.data && event.notification.data.url) || './';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
+      for (const client of clientList) {
+        if ('focus' in client) return client.focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(targetUrl);
+    })
+  );
+});
